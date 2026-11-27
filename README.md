@@ -23,6 +23,11 @@ Aplikasi ini dirancang dengan output **step-by-step** yang menampilkan seluruh p
 
 ## Daftar Isi
 
+- [Penjelasan Kode (`dh_elgamal.py`)](#penjelasan-kode-dh_elgamalpy)
+  - [1. Utilitas Matematika & Diffie-Hellman (Baris 1–39)](#1-utilitas-matematika--diffie-hellman-baris-139)
+  - [2. Algoritma ElGamal & Validasi Input (Baris 40–79)](#2-algoritma-elgamal--validasi-input-baris-4079)
+  - [3. Alur Eksekusi & Penanganan Error (Baris 80–157)](#3-alur-eksekusi--penanganan-error-baris-80157)
+  - [4. Antarmuka Grafis Tkinter (Baris 158–188)](#4-antarmuka-grafis-tkinter-baris-158188)
 - [Fitur Utama](#fitur-utama)
 - [Struktur Direktori](#struktur-direktori)
 - [Prasyarat & Instalasi](#prasyarat--instalasi)
@@ -36,8 +41,166 @@ Aplikasi ini dirancang dengan output **step-by-step** yang menampilkan seluruh p
   - [Step 5 — Enkripsi & Dekripsi ElGamal (Mode Manual)](#step-5--enkripsi--dekripsi-elgamal-mode-manual)
   - [Step 6 — Validasi Input & Penanganan Error](#step-6--validasi-input--penanganan-error)
 - [Landasan Teori & Rumus Matematis](#landasan-teori--rumus-matematis)
-- [Dokumentasi Teknis Kode (`dh_elgamal.py`)](#dokumentasi-teknis-kode-dh_elgamalpy)
 - [Catatan Implementasi & Batasan](#catatan-implementasi--batasan)
+
+---
+
+## Penjelasan Kode (`dh_elgamal.py`)
+
+Secara keseluruhan, berkas [`dh_elgamal.py`](dh_elgamal.py) disusun menjadi empat bagian utama: fungsi matematika dan Diffie-Hellman (baris 1–39), inti algoritma ElGamal dan validasi input (baris 40–79), alur eksekusi beserta penanganan error (baris 80–157), serta susunan antarmuka Tkinter (baris 158–188).
+
+### 1. Utilitas Matematika & Diffie-Hellman (Baris 1–39)
+
+Bagian awal ini mengimpor modul `random` (untuk menghasilkan kunci rahasia acak saat input dikosongkan) serta `tkinter as tk` (untuk membangun GUI), lalu mendefinisikan fungsi bilangan prima, akar primitif, dan perhitungan Diffie-Hellman.
+
+```python
+def is_prime(n):
+    if n < 2:
+        return False
+    for i in range(2, int(n ** 0.5) + 1):
+        if n % i == 0:
+            return False
+    return True
+
+def is_akar_primitif(g, p):
+    for i in range(1, p - 1):
+        if pow(g, i, p) == 1:
+            return False
+    return True
+
+def cari_akar_primitif(p):
+    for g in range(2, p):
+        if is_akar_primitif(g, p):
+            return g
+```
+
+- **`is_prime(n)` (baris 7–13):** Memeriksa apakah `n` bilangan prima. Bilangan di bawah `2` langsung mengembalikan `False`, sedangkan bilangan $\ge 2$ diuji apakah habis dibagi bilangan bulat dari `2` sampai $\lfloor\sqrt{n}\rfloor$.
+- **`is_akar_primitif(g, p)` (baris 16–21):** Menguji apakah `g` adalah akar primitif modulo `p`. Fungsi menghitung `pow(g, i, p)` secara berurutan untuk `i` dari `1` sampai `p - 2`. Jika ada pangkat sebelum `p - 1` yang menghasilkan `1`, berarti orde `g` lebih kecil dari `p - 1` sehingga `False`.
+- **`cari_akar_primitif(p)` (baris 24–27):** Digunakan saat pengguna mengosongkan kolom `g`. Fungsi mencoba kandidat `g` mulai dari `2` hingga `p - 1` dan langsung mengembalikan nilai pertama yang lolos `is_akar_primitif(g, p)`.
+
+```python
+def dh_kunci_publik(g, rahasia, p):
+    return pow(g, rahasia, p)          # X = g^x mod p
+
+def dh_kunci_sesi(publik_lawan, rahasia, p):
+    return pow(publik_lawan, rahasia, p)   # K = Y^x mod p
+```
+
+- **`dh_kunci_publik(g, rahasia, p)` (baris 32–33):** Menghitung kunci publik Alice ($X = g^x \bmod p$) atau Bob ($Y = g^y \bmod p$) memanfaatkan fungsi perpangkatan modular bawaan Python `pow(base, exp, mod)`.
+- **`dh_kunci_sesi(publik_lawan, rahasia, p)` (baris 36–37):** Menghitung kunci rahasia bersama dari kunci publik yang diterima lawan bicara dipangkatkan dengan bilangan rahasia milik sendiri modulo `p` ($K = Y^x \bmod p$ atau $K' = X^y \bmod p$).
+
+---
+
+### 2. Algoritma ElGamal & Validasi Input (Baris 40–79)
+
+Bagian kedua berisi rumus pembangkitan kunci, enkripsi, dan dekripsi ElGamal, diikuti fungsi bantu untuk membaca nilai form GUI serta memvalidasi syarat matematisnya.
+
+```python
+def elgamal_buat_kunci(p, g, x):
+    return pow(g, x, p)                # y = g^x mod p
+
+def elgamal_enkripsi(m, p, g, y, k):
+    a = pow(g, k, p)                   # a = g^k mod p
+    b = (pow(y, k, p) * m) % p         # b = y^k * m mod p
+    return a, b
+
+def elgamal_dekripsi(a, b, p, x):
+    return (b * pow(a, p - 1 - x, p)) % p   # m = b * a^(p-1-x) mod p
+```
+
+- **`elgamal_buat_kunci(p, g, x)` (baris 42–43):** Menghitung komponen kunci publik $y = g^x \bmod p$ dari bilangan prima `p`, akar primitif `g`, dan kunci privat `x`.
+- **`elgamal_enkripsi(m, p, g, y, k)` (baris 46–49):** Mengenkripsi satu blok integer `m` menggunakan nilai acak sementara `k` untuk menghasilkan pasangan ciphertext `(a, b)`, dengan `a = g^k mod p` dan `b = (y^k * m) mod p`.
+- **`elgamal_dekripsi(a, b, p, x)` (baris 52–53):** Memulihkan nilai `m` dari pasangan `(a, b)` menggunakan kunci privat `x`. Berdasarkan Teorema Kecil Fermat, invers modular $a^{-x} \bmod p$ dapat dihitung langsung sebagai `pow(a, p - 1 - x, p)` sebelum dikalikan dengan `b` modulo `p`.
+
+```python
+def baca(entry):
+    teks = entry.get().strip()
+    return int(teks) if teks else None
+
+def ambil_p_g():
+    p = baca(e_p) or 2357
+    if not is_prime(p):
+        raise ValueError("p harus bilangan prima")
+    g = baca(e_g) or cari_akar_primitif(p)
+    if not (1 < g < p and is_akar_primitif(g, p)):
+        raise ValueError(f"g = {g} bukan akar primitif mod {p}")
+    return p, g
+
+def ambil_rahasia(entry, p):
+    n = baca(entry) or random.randint(2, p - 2)
+    if not 1 <= n <= p - 2:
+        raise ValueError(f"Nilai rahasia harus 1 .. {p - 2}")
+    return n
+```
+
+- **`baca(entry)` (baris 58–60):** Mengambil teks dari komponen `tk.Entry`, menghapus spasi di tepi menggunakan `.strip()`, lalu mengubahnya menjadi `int`. Jika kolom kosong, fungsi mengembalikan `None`. Jika diisi teks selain angka, `int(teks)` otomatis melempar `ValueError`.
+- **`ambil_p_g()` (baris 63–70):** Mengambil nilai `p` (otomatis memakai `2357` jika kosong) lalu mengecek keprimaannya lewat `is_prime(p)`. Selanjutnya mengambil `g` (atau mencari otomatis lewat `cari_akar_primitif(p)`), kemudian memastikan `1 < g < p` dan `g` benar-benar akar primitif modulo `p`.
+- **`ambil_rahasia(entry, p)` (baris 73–77):** Membaca bilangan rahasia (`x` atau `y`). Jika kosong, sistem memilih angka acak di rentang `2 .. p - 2`, lalu memastikan nilai akhirnya memenuhi batas `1 <= n <= p - 2`.
+
+---
+
+### 3. Alur Eksekusi & Penanganan Error (Baris 80–157)
+
+Bagian ketiga menyatukan fungsi matematika dan input untuk menjalankan simulasi lengkap Diffie-Hellman maupun ElGamal, sekaligus mengamankan eksekusi tombol agar kesalahan input tidak membuat aplikasi berhenti tiba-tiba.
+
+```python
+def jalankan_dh():
+    p, g = ambil_p_g()
+    x = ambil_rahasia(e_x, p)
+    y = ambil_rahasia(e_y, p)
+
+    X = dh_kunci_publik(g, x, p)
+    Y = dh_kunci_publik(g, y, p)
+    K1 = dh_kunci_sesi(Y, x, p)
+    K2 = dh_kunci_sesi(X, y, p)
+    ...
+```
+
+- **`jalankan_dh()` (baris 82–103):** Mengambil parameter `p`, `g`, rahasia Alice `x`, dan rahasia Bob `y`. Setelah itu fungsi menghitung kedua kunci publik (`X` dan `Y`) serta kunci sesi dari masing-masing sisi (`K1` dan `K2`), lalu memformat seluruh perhitungannya ke dalam 6 langkah teks berurutan beserta hasil verifikasi `K1 == K2`.
+
+```python
+def jalankan_elgamal():
+    p, g = ambil_p_g()
+    x = ambil_rahasia(e_x, p)
+    pesan = e_pesan.get()
+    if not pesan:
+        raise ValueError("Pesan tidak boleh kosong")
+    if any(ord(c) >= p for c in pesan):
+        raise ValueError("p terlalu kecil, harus lebih besar dari kode ASCII huruf")
+    ...
+    for c in pesan:
+        m = ord(c)
+        k = baca(e_k) or random.randint(1, p - 2)
+        a, b = elgamal_enkripsi(m, p, g, y, k)
+        cipher.append((a, b))
+    ...
+    for a, b in cipher:
+        m = elgamal_dekripsi(a, b, p, x)
+        plain += chr(m)
+```
+
+- **`jalankan_elgamal()` (baris 106–147):** Membaca parameter `p`, `g`, kunci privat `x`, dan string dari `e_pesan`. Fungsi terlebih dahulu menolak pesan kosong serta memastikan tidak ada karakter dengan kode ASCII `ord(c) >= p` (karena nilai pesan harus berada dalam modulo `p`). Setelah membangkitkan kunci publik `y`, setiap karakter diubah ke ASCII, dienkripsi satu per satu menjadi `(a, b)`—dengan `k` yang diacak per huruf jika input `k` dikosongkan—lalu didekripsi kembali menggunakan `elgamal_dekripsi()` dan disusun ulang dengan `chr(m)` untuk dicocokkan dengan plaintext awal.
+
+```python
+def aman(fungsi):
+    out.delete("1.0", tk.END)
+    try:
+        out.insert(tk.END, fungsi())
+    except ValueError as err:
+        out.insert(tk.END, f"ERROR: {err}")
+```
+
+- **`aman(fungsi)` (baris 150–155):** Pembungkus (*wrapper*) yang dipanggil oleh kedua tombol GUI. Setiap kali tombol ditekan, kotak output `out` dikosongkan terlebih dahulu, lalu `fungsi()` dijalankan di dalam blok `try ... except ValueError`. Jika ada validasi yang gagal (seperti `p` bukan prima atau format bukan angka), pesan error ditampilkan rapi di kotak output dengan awalan `ERROR: `.
+
+---
+
+### 4. Antarmuka Grafis Tkinter (Baris 158–188)
+
+Bagian terakhir membangun tata letak jendela utama aplikasi:
+
+- **Inisialisasi & Helper Baris (baris 160–168):** Membuat window utama `root` berjudul `"Diffie-Hellman & ElGamal"` dan fungsi bantu `input_baris(baris, label)` untuk menempatkan pasangan `tk.Label` di kolom kiri dan `tk.Entry` (`width=40`) di kolom kanan menggunakan layout `.grid()`.
+- **Komponen Input & Tombol (baris 171–186):** Mendaftarkan 6 field input (`e_p`, `e_g`, `e_x`, `e_y`, `e_k`, `e_pesan`), teks keterangan mode otomatis, tombol **Diffie-Hellman** (`command=lambda: aman(jalankan_dh)`), tombol **ElGamal** (`command=lambda: aman(jalankan_elgamal)`), serta kotak output `out` berupa `tk.Text(width=95, height=25, font=("Consolas", 10))`.
+- **Event Loop (baris 188):** Menjalankan `root.mainloop()` agar jendela tetap aktif menerima interaksi pengguna.
 
 ---
 
@@ -57,7 +220,7 @@ Aplikasi ini dirancang dengan output **step-by-step** yang menampilkan seluruh p
 ```text
 tugas 2/
 ├── dh_elgamal.py                        # File utama aplikasi GUI Diffie-Hellman & ElGamal
-├── README.md                            # Dokumentasi lengkap, teori, & panduan penggunaan
+├── README.md                            # Penjelasan kode, dokumentasi lengkap, & panduan penggunaan
 └── screenshots/                         # Tangkapan layar aplikasi step-by-step
     ├── 01-tampilan-awal.png             # Kondisi GUI saat pertama dibuka
     ├── 02-diffie-hellman-otomatis.png   # Hasil Diffie-Hellman dengan parameter otomatis
@@ -293,167 +456,6 @@ $$a^{-x} \equiv a^{p - 1 - x} \pmod p$$
 Sehingga proses dekripsi menghitung:
 
 $$b \cdot a^{p - 1 - x} \equiv (g^{xk} \cdot m) \cdot (g^k)^{-x} \equiv m \pmod p$$
-
----
-
-## Dokumentasi Teknis Kode (`dh_elgamal.py`)
-
-Secara keseluruhan, berkas [`dh_elgamal.py`](dh_elgamal.py) disusun menjadi empat bagian utama: fungsi matematika dan Diffie-Hellman (baris 1–39), inti algoritma ElGamal dan validasi input (baris 40–79), alur eksekusi beserta penanganan error (baris 80–157), serta susunan antarmuka Tkinter (baris 158–188).
-
----
-
-### 1. Utilitas Matematika & Diffie-Hellman (Baris 1–39)
-
-Bagian awal ini mengimpor modul `random` (untuk menghasilkan kunci rahasia acak saat input dikosongkan) serta `tkinter as tk` (untuk membangun GUI), lalu mendefinisikan fungsi bilangan prima, akar primitif, dan perhitungan Diffie-Hellman.
-
-```python
-def is_prime(n):
-    if n < 2:
-        return False
-    for i in range(2, int(n ** 0.5) + 1):
-        if n % i == 0:
-            return False
-    return True
-
-def is_akar_primitif(g, p):
-    for i in range(1, p - 1):
-        if pow(g, i, p) == 1:
-            return False
-    return True
-
-def cari_akar_primitif(p):
-    for g in range(2, p):
-        if is_akar_primitif(g, p):
-            return g
-```
-
-- **`is_prime(n)` (baris 7–13):** Memeriksa apakah `n` bilangan prima. Bilangan di bawah `2` langsung mengembalikan `False`, sedangkan bilangan $\ge 2$ diuji apakah habis dibagi bilangan bulat dari `2` sampai $\lfloor\sqrt{n}\rfloor$.
-- **`is_akar_primitif(g, p)` (baris 16–21):** Menguji apakah `g` adalah akar primitif modulo `p`. Fungsi menghitung `pow(g, i, p)` secara berurutan untuk `i` dari `1` sampai `p - 2`. Jika ada pangkat sebelum `p - 1` yang menghasilkan `1`, berarti orde `g` lebih kecil dari `p - 1` sehingga `False`.
-- **`cari_akar_primitif(p)` (baris 24–27):** Digunakan saat pengguna mengosongkan kolom `g`. Fungsi mencoba kandidat `g` mulai dari `2` hingga `p - 1` dan langsung mengembalikan nilai pertama yang lolos `is_akar_primitif(g, p)`.
-
-```python
-def dh_kunci_publik(g, rahasia, p):
-    return pow(g, rahasia, p)          # X = g^x mod p
-
-def dh_kunci_sesi(publik_lawan, rahasia, p):
-    return pow(publik_lawan, rahasia, p)   # K = Y^x mod p
-```
-
-- **`dh_kunci_publik(g, rahasia, p)` (baris 32–33):** Menghitung kunci publik Alice ($X = g^x \bmod p$) atau Bob ($Y = g^y \bmod p$) memanfaatkan fungsi perpangkatan modular bawaan Python `pow(base, exp, mod)`.
-- **`dh_kunci_sesi(publik_lawan, rahasia, p)` (baris 36–37):** Menghitung kunci rahasia bersama dari kunci publik yang diterima lawan bicara dipangkatkan dengan bilangan rahasia milik sendiri modulo `p` ($K = Y^x \bmod p$ atau $K' = X^y \bmod p$).
-
----
-
-### 2. Algoritma ElGamal & Validasi Input (Baris 40–79)
-
-Bagian kedua berisi rumus pembangkitan kunci, enkripsi, dan dekripsi ElGamal, diikuti fungsi bantu untuk membaca nilai form GUI serta memvalidasi syarat matematisnya.
-
-```python
-def elgamal_buat_kunci(p, g, x):
-    return pow(g, x, p)                # y = g^x mod p
-
-def elgamal_enkripsi(m, p, g, y, k):
-    a = pow(g, k, p)                   # a = g^k mod p
-    b = (pow(y, k, p) * m) % p         # b = y^k * m mod p
-    return a, b
-
-def elgamal_dekripsi(a, b, p, x):
-    return (b * pow(a, p - 1 - x, p)) % p   # m = b * a^(p-1-x) mod p
-```
-
-- **`elgamal_buat_kunci(p, g, x)` (baris 42–43):** Menghitung komponen kunci publik $y = g^x \bmod p$ dari bilangan prima `p`, akar primitif `g`, dan kunci privat `x`.
-- **`elgamal_enkripsi(m, p, g, y, k)` (baris 46–49):** Mengenkripsi satu blok integer `m` menggunakan nilai acak sementara `k` untuk menghasilkan pasangan ciphertext `(a, b)`, dengan `a = g^k mod p` dan `b = (y^k * m) mod p`.
-- **`elgamal_dekripsi(a, b, p, x)` (baris 52–53):** Memulihkan nilai `m` dari pasangan `(a, b)` menggunakan kunci privat `x`. Berdasarkan Teorema Kecil Fermat, invers modular $a^{-x} \bmod p$ dapat dihitung langsung sebagai `pow(a, p - 1 - x, p)` sebelum dikalikan dengan `b` modulo `p`.
-
-```python
-def baca(entry):
-    teks = entry.get().strip()
-    return int(teks) if teks else None
-
-def ambil_p_g():
-    p = baca(e_p) or 2357
-    if not is_prime(p):
-        raise ValueError("p harus bilangan prima")
-    g = baca(e_g) or cari_akar_primitif(p)
-    if not (1 < g < p and is_akar_primitif(g, p)):
-        raise ValueError(f"g = {g} bukan akar primitif mod {p}")
-    return p, g
-
-def ambil_rahasia(entry, p):
-    n = baca(entry) or random.randint(2, p - 2)
-    if not 1 <= n <= p - 2:
-        raise ValueError(f"Nilai rahasia harus 1 .. {p - 2}")
-    return n
-```
-
-- **`baca(entry)` (baris 58–60):** Mengambil teks dari komponen `tk.Entry`, menghapus spasi di tepi menggunakan `.strip()`, lalu mengubahnya menjadi `int`. Jika kolom kosong, fungsi mengembalikan `None`. Jika diisi teks selain angka, `int(teks)` otomatis melempar `ValueError`.
-- **`ambil_p_g()` (baris 63–70):** Mengambil nilai `p` (otomatis memakai `2357` jika kosong) lalu mengecek keprimaannya lewat `is_prime(p)`. Selanjutnya mengambil `g` (atau mencari otomatis lewat `cari_akar_primitif(p)`), kemudian memastikan `1 < g < p` dan `g` benar-benar akar primitif modulo `p`.
-- **`ambil_rahasia(entry, p)` (baris 73–77):** Membaca bilangan rahasia (`x` atau `y`). Jika kosong, sistem memilih angka acak di rentang `2 .. p - 2`, lalu memastikan nilai akhirnya memenuhi batas `1 <= n <= p - 2`.
-
----
-
-### 3. Alur Eksekusi & Penanganan Error (Baris 80–157)
-
-Bagian ketiga menyatukan fungsi matematika dan input untuk menjalankan simulasi lengkap Diffie-Hellman maupun ElGamal, sekaligus mengamankan eksekusi tombol agar kesalahan input tidak membuat aplikasi berhenti tiba-tiba.
-
-```python
-def jalankan_dh():
-    p, g = ambil_p_g()
-    x = ambil_rahasia(e_x, p)
-    y = ambil_rahasia(e_y, p)
-
-    X = dh_kunci_publik(g, x, p)
-    Y = dh_kunci_publik(g, y, p)
-    K1 = dh_kunci_sesi(Y, x, p)
-    K2 = dh_kunci_sesi(X, y, p)
-    ...
-```
-
-- **`jalankan_dh()` (baris 82–103):** Mengambil parameter `p`, `g`, rahasia Alice `x`, dan rahasia Bob `y`. Setelah itu fungsi menghitung kedua kunci publik (`X` dan `Y`) serta kunci sesi dari masing-masing sisi (`K1` dan `K2`), lalu memformat seluruh perhitungannya ke dalam 6 langkah teks berurutan beserta hasil verifikasi `K1 == K2`.
-
-```python
-def jalankan_elgamal():
-    p, g = ambil_p_g()
-    x = ambil_rahasia(e_x, p)
-    pesan = e_pesan.get()
-    if not pesan:
-        raise ValueError("Pesan tidak boleh kosong")
-    if any(ord(c) >= p for c in pesan):
-        raise ValueError("p terlalu kecil, harus lebih besar dari kode ASCII huruf")
-    ...
-    for c in pesan:
-        m = ord(c)
-        k = baca(e_k) or random.randint(1, p - 2)
-        a, b = elgamal_enkripsi(m, p, g, y, k)
-        cipher.append((a, b))
-    ...
-    for a, b in cipher:
-        m = elgamal_dekripsi(a, b, p, x)
-        plain += chr(m)
-```
-
-- **`jalankan_elgamal()` (baris 106–147):** Membaca parameter `p`, `g`, kunci privat `x`, dan string dari `e_pesan`. Fungsi terlebih dahulu menolak pesan kosong serta memastikan tidak ada karakter dengan kode ASCII `ord(c) >= p` (karena nilai pesan harus berada dalam modulo `p`). Setelah membangkitkan kunci publik `y`, setiap karakter diubah ke ASCII, dienkripsi satu per satu menjadi `(a, b)`—dengan `k` yang diacak per huruf jika input `k` dikosongkan—lalu didekripsi kembali menggunakan `elgamal_dekripsi()` dan disusun ulang dengan `chr(m)` untuk dicocokkan dengan plaintext awal.
-
-```python
-def aman(fungsi):
-    out.delete("1.0", tk.END)
-    try:
-        out.insert(tk.END, fungsi())
-    except ValueError as err:
-        out.insert(tk.END, f"ERROR: {err}")
-```
-
-- **`aman(fungsi)` (baris 150–155):** Pembungkus (*wrapper*) yang dipanggil oleh kedua tombol GUI. Setiap kali tombol ditekan, kotak output `out` dikosongkan terlebih dahulu, lalu `fungsi()` dijalankan di dalam blok `try ... except ValueError`. Jika ada validasi yang gagal (seperti `p` bukan prima atau format bukan angka), pesan error ditampilkan rapi di kotak output dengan awalan `ERROR: `.
-
----
-
-### 4. Antarmuka Grafis Tkinter (Baris 158–188)
-
-Bagian terakhir membangun tata letak jendela utama aplikasi:
-
-- **Inisialisasi & Helper Baris (baris 160–168):** Membuat window utama `root` berjudul `"Diffie-Hellman & ElGamal"` dan fungsi bantu `input_baris(baris, label)` untuk menempatkan pasangan `tk.Label` di kolom kiri dan `tk.Entry` (`width=40`) di kolom kanan menggunakan layout `.grid()`.
-- **Komponen Input & Tombol (baris 171–186):** Mendaftarkan 6 field input (`e_p`, `e_g`, `e_x`, `e_y`, `e_k`, `e_pesan`), teks keterangan mode otomatis, tombol **Diffie-Hellman** (`command=lambda: aman(jalankan_dh)`), tombol **ElGamal** (`command=lambda: aman(jalankan_elgamal)`), serta kotak output `out` berupa `tk.Text(width=95, height=25, font=("Consolas", 10))`.
-- **Event Loop (baris 188):** Menjalankan `root.mainloop()` agar jendela tetap aktif menerima interaksi pengguna.
 
 ---
 
