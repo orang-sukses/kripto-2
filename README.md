@@ -15,7 +15,7 @@ Aplikasi ini dirancang dengan output **step-by-step** yang menampilkan seluruh p
 | :-: | :--- | :--- |
 | 1 | **Ahmad Yazid Arifuddin** | `5027241040` |
 | 2 | **Muhammad Farrel Rafli Al Fasya** | `5027241075` |
-| 3 | **Abyan** | `-` |
+| 3 | **Mohammad Abyan Ranuaji** | `5027241106` |
 
 > **Mata Kuliah:** Kriptografi (Tugas 2) — Institut Teknologi Sepuluh Nopember (ITS)
 
